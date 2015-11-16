@@ -1,41 +1,20 @@
-import spray.boilerplate.BoilerplatePlugin.Boilerplate
-
-import java.util.Properties
-
-val akkaVersion = "2.3.10"
-
-val json4sVersion = "3.2.10"
-
-val appProperties = {
-  val prop = new Properties()
-  IO.load(prop, new File("project/version.properties"))
-  prop
-}
 
 val assertNoApplicationConf = taskKey[Unit]("Makes sure application.conf isn't packaged")
 
+organization in ThisBuild  := "io.dpratt"
+scalaVersion in ThisBuild := "2.11.7"
+
+scalacOptions in ThisBuild ++= List("-target:jvm-1.6")
+crossScalaVersions in ThisBuild := Seq("2.11.7", "2.10.5")
+
+resolvers in ThisBuild ++= Seq(
+  "Typesafe repository" at "http://repo.typesafe.com/typesafe/releases/",
+  "SpinGo OSS" at "http://spingo-oss.s3.amazonaws.com/repositories/releases",
+  "Sonatype Releases"  at "http://oss.sonatype.org/content/repositories/releases"
+)
+
+
 val commonSettings = Seq(
-  organization := "com.spingo",
-  version := appProperties.getProperty("version"),
-  scalaVersion := "2.11.7",
-  crossScalaVersions := Seq("2.11.7", "2.10.5"),
-  resolvers ++= Seq(
-    "Typesafe repository" at "http://repo.typesafe.com/typesafe/releases/",
-    "SpinGo OSS" at "http://spingo-oss.s3.amazonaws.com/repositories/releases",
-    "Sonatype Releases"  at "http://oss.sonatype.org/content/repositories/releases"
-  ),
-  libraryDependencies ++= Seq(
-    "com.chuusai" %%  "shapeless" % "2.2.3",
-    "com.typesafe" % "config" % "1.3.0",
-    "com.typesafe.akka"     %%  "akka-actor"   % akkaVersion,
-    "com.typesafe.akka"     %%  "akka-testkit" % akkaVersion % "test",
-    "com.typesafe.akka"     %%  "akka-slf4j"   % akkaVersion % "test",
-    "com.thenewmotion.akka" %% "akka-rabbitmq" % "1.2.7",
-    "org.slf4j" % "slf4j-api" % "1.7.12",
-    "ch.qos.logback" % "logback-classic" % "1.1.3" % "test",
-    "org.scalatest" %% "scalatest" % "2.2.1" % "test",
-    "com.spingo" %% "scoped-fixtures" % "1.0.0" % "test"
-  ),
   publishMavenStyle := true,
   publishTo := {
     val repo = if (version.value.trim.endsWith("SNAPSHOT")) "snapshots" else "releases"
@@ -43,66 +22,31 @@ val commonSettings = Seq(
   }
 )
 
-lazy val `op-rabbit` = (project in file(".")).
-  settings(commonSettings: _*).
-  settings(unidocSettings: _*).
-  settings(
+def rabbitProject(id: String, loc: String) = Project(id, file(loc)).settings(commonSettings: _*)
+
+lazy val `op-rabbit` = rabbitProject("op-rabbit", ".")
+  .settings(commonSettings: _*)
+  .settings(unidocSettings: _*)
+  .settings(
     description := "The opinionated Rabbit-MQ plugin",
-    name := "op-rabbit").
-  dependsOn(core).
-  aggregate(core, `play-json`, airbrake, `akka-stream`, json4s, `spray-json`)
+    name := "op-rabbit")
+  .dependsOn(core)
+  .aggregate(core, `play-json`, airbrake, `akka-stream`, json4s, `spray-json`)
 
 
-lazy val core = (project in file("./core")).
-  settings(Boilerplate.settings: _*).
-  settings(commonSettings: _*).
-  settings(
-    name := "op-rabbit-core"
-  )
+lazy val core = rabbitProject("core", "./core")
 
+lazy val json4s = rabbitProject("json4s", "./addons/json4s")
+  .dependsOn(core)
 
-lazy val json4s = (project in file("./addons/json4s")).
-  settings(commonSettings: _*).
-  settings(
-    name := "op-rabbit-json4s",
-    libraryDependencies ++= Seq(
-      "org.json4s" %% "json4s-ast"     % json4sVersion,
-      "org.json4s" %% "json4s-core"    % json4sVersion,
-      "org.json4s" %% "json4s-jackson" % json4sVersion % "provided",
-      "org.json4s" %% "json4s-native"  % json4sVersion % "provided")).
-  dependsOn(core)
+lazy val `play-json` = rabbitProject("play-json", "./addons/play-json")
+  .dependsOn(core)
 
-lazy val `play-json` = (project in file("./addons/play-json")).
-  settings(commonSettings: _*).
-  settings(
-    name := "op-rabbit-play-json",
-    libraryDependencies += "com.typesafe.play" %% "play-json" % "2.4.2").
-  dependsOn(core)
+lazy val `spray-json` = rabbitProject("spray-json", "./addons/spray-json")
+  .dependsOn(core)
 
-lazy val `spray-json` = (project in file("./addons/spray-json")).
-  settings(commonSettings: _*).
-  settings(
-    name := "op-rabbit-spray-json",
-    libraryDependencies += "io.spray" %% "spray-json" % "1.3.2").
-  dependsOn(core)
+lazy val airbrake = rabbitProject("airbrake", "./addons/airbrake/")
+  .dependsOn(core)
 
-lazy val airbrake = (project in file("./addons/airbrake/")).
-  settings(commonSettings: _*).
-  settings(
-    name := "op-rabbit-airbrake",
-    libraryDependencies += "io.airbrake" % "airbrake-java" % "2.2.8").
-  dependsOn(core)
-
-
-lazy val `akka-stream` = (project in file("./addons/akka-stream")).
-  settings(commonSettings: _*).
-  settings(
-    name := "op-rabbit-akka-stream",
-    libraryDependencies ++= Seq(
-      "com.timcharper"    %% "acked-stream" % "1.0-RC1",
-      "com.typesafe.akka" %% "akka-stream-experimental" % "1.0"),
-    unmanagedResourceDirectories in Test ++= Seq(
-      (file(".").getAbsoluteFile) / "core" / "src" / "test" / "resources"),
-    unmanagedSourceDirectories in Test ++= Seq(
-      (file(".").getAbsoluteFile) / "core" / "src" / "test" / "scala" / "com" / "spingo" / "op_rabbit" / "helpers")).
-  dependsOn(core)
+lazy val `akka-stream` = rabbitProject("akka-stream", "./addons/akka-stream")
+  .dependsOn(core % "test->test;compile->compile")

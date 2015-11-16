@@ -18,8 +18,11 @@ import org.scalatest.{FunSpec, Matchers}
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.concurrent.duration._
 import scala.util.{Try,Success,Failure}
+import org.slf4j.LoggerFactory
 
 class RabbitSourceSpec extends FunSpec with ScopedFixtures with Matchers with RabbitTestHelpers {
+
+  val logger = LoggerFactory.getLogger(this.getClass)
 
   val queueName = ScopedFixture[String] { setter =>
     val name = s"test-queue-rabbit-control-${Math.random()}"
@@ -119,12 +122,12 @@ class RabbitSourceSpec extends FunSpec with ScopedFixtures with Matchers with Ra
           subscription.close()
           await(subscription.closed)
         } finally {
-          println("deleting")
+          logger.debug("deleting")
           val delete = DeleteQueue(queueName())
           rabbitControl ! DeleteQueue(queueName())
           Try {
             await(delete.processed, 1 second)
-            println("deleted")
+            logger.debug("deleted")
           }
         }
       }

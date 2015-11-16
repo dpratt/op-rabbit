@@ -5,8 +5,12 @@ import com.rabbitmq.client.MessageProperties
 import org.scalatest.{FunSpec, Matchers}
 import scala.concurrent.{Await, Future, Promise}
 import scala.concurrent.duration._
+import org.slf4j.LoggerFactory
 
 class DirectivesSpec extends FunSpec with Matchers {
+
+  val logger = LoggerFactory.getLogger(this.getClass())
+
   val dummyEnvelope = new Envelope(1L, false, "kthx", "bai")
 
   val acked: Result = Right(Ack(1L))
@@ -86,7 +90,7 @@ class DirectivesSpec extends FunSpec with Matchers {
 
         (provide(1) & provide("name") & provide(2)).as(LosContainer) { container =>
           container should be (LosContainer(1, "name", Some(2)))
-          println(container)
+          logger.debug("{}", container)
           ack
         }
       } should be (acked)

@@ -9,8 +9,11 @@ import org.scalatest.{FunSpec, Matchers}
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.concurrent.duration._
 import scala.util.{Failure, Try}
+import org.slf4j.LoggerFactory
 
 class RabbitControlSpec extends FunSpec with ScopedFixtures with Matchers with RabbitTestHelpers {
+
+  val logger = LoggerFactory.getLogger(this.getClass());
 
   val _queueName = ScopedFixture[String] { setter =>
     val name = s"test-queue-rabbit-control-${Math.random()}"
@@ -36,7 +39,7 @@ class RabbitControlSpec extends FunSpec with ScopedFixtures with Matchers with R
           channel(qos = 5) {
             consume(queue(queueName, durable = false, exclusive = false)) {
               body(as[Int]) { i =>
-                println(s"received $i")
+                logger.debug(s"received $i")
                 count += 1
                 promises(i).success(i)
                 ack()
@@ -108,10 +111,10 @@ class RabbitControlSpec extends FunSpec with ScopedFixtures with Matchers with R
             case ('receive, -1) =>
               doneReceive.success()
             case ('confirm, n: Int) =>
-              println(s"== confirm $n")
+              logger.debug(s"== confirm $n")
               countConfirmed += 1
             case ('receive, n: Int) =>
-              println(s"receive $n")
+              logger.debug(s"receive $n")
               if(n <= lastReceived) // duplicate message
                 ()
               else {

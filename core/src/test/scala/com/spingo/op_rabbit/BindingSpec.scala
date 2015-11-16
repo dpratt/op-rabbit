@@ -9,8 +9,12 @@ import com.thenewmotion.akka.rabbitmq.RichConnectionActor
 import org.scalatest.{FunSpec, Matchers}
 import scala.concurrent.Promise
 import scala.concurrent.{ExecutionContext, Future}
+import org.slf4j.LoggerFactory
 
 class BindingSpec extends FunSpec with ScopedFixtures with Matchers with RabbitTestHelpers {
+
+  val logger = LoggerFactory.getLogger(this.getClass());
+
   val _queueName = ScopedFixture[String] { setter =>
     val name = s"test-queue-rabbit-control-${Math.random()}"
     deleteQueue(name)
@@ -136,7 +140,7 @@ class BindingSpec extends FunSpec with ScopedFixtures with Matchers with RabbitT
             headers = List(Header("thing", "1"))
           )) {
             body(as[String]) { a =>
-              println(s"String consumer has string $a")
+              logger.debug(s"String consumer has string $a")
               stringReceived.success(a)
               ack
             }

@@ -96,23 +96,23 @@ private class MessagePublisherSinkActor(rabbitControl: ActorRef, timeoutAfter: F
 }
 
 /**
-  A MessagePublisherSink (an [[https://github.com/timcharper/acked-stream/blob/master/src/main/scala/com/timcharper/acked/AckedSink.scala AckedSink]]) publishes each input [[Message]], and either acks or fails the upstream element, depending on [[Message$.ConfirmResponse ConfirmResponse]].
+  A MessagePublisherSink (an [[https://github.com/timcharper/acked-stream/blob/master/src/main/scala/com/timcharper/acked/AckedSink.scala AckedSink]]) publishes each input [[Message]], and either acks or fails the upstream element, depending on [[Message.ConfirmResponse ConfirmResponse]].
 
-  Using a [[RabbitSource$ RabbitSource]] with a [[MessagePublisherSink$ MessagePublisherSink]] is a great way to get persistent, recoverable streams.
+  Using a [[RabbitSource RabbitSource]] with a [[MessagePublisherSink MessagePublisherSink]] is a great way to get persistent, recoverable streams.
 
   Note - MessagePublisherSink uses ActorPublisher and due to AkkaStream limitations, it DOES NOT abide your configured supervisor strategy.
 
   == [[com.spingo.op_rabbit.Message$.ConfirmResponse Message.ConfirmResponse]] handling ==
 
-  After the sink publishes the [[Message]], it listens for the [[Message$.ConfirmResponse Message.ConfirmResponse]], and handles it accordingly:
+  After the sink publishes the [[Message]], it listens for the [[Message.ConfirmResponse Message.ConfirmResponse]], and handles it accordingly:
 
-  - On [[Message$.Ack Message.Ack]], ack the upstream element.
+  - On [[Message.Ack Message.Ack]], ack the upstream element.
 
-  - On [[Message$.Nack Message.Nack]], fail the upstream element with
+  - On [[Message.Nack Message.Nack]], fail the upstream element with
     [[MessageNacked]]. '''Does not''' throw a stream
     exception. Processing continues.
 
-  - On [[Message$.Fail Message.Fail]], fail the upstream element with
+  - On [[Message.Fail Message.Fail]], fail the upstream element with
     publisher exception. '''Does not''' throw a stream
     exception. Processing continues.
 
@@ -121,7 +121,7 @@ private class MessagePublisherSinkActor(rabbitControl: ActorRef, timeoutAfter: F
   This sinks materialized type is Future[Unit]. The following applies:
 
   - It yields any upstream failure as soon as it reaches the sink (potentially before messages are confirmed).
-  - After the stream completes, and all [[Message$.ConfirmResponse Message.ConfirmResponse]]'s have have been processed, the Future[Unit] is completed.
+  - After the stream completes, and all [[Message.ConfirmResponse Message.ConfirmResponse]]'s have have been processed, the Future[Unit] is completed.
   */
 object MessagePublisherSink {
   /**

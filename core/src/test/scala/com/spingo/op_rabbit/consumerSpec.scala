@@ -10,8 +10,11 @@ import org.scalatest.{FunSpec, Matchers}
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.concurrent.duration._
 import scala.util.{Random,Try,Failure}
+import org.slf4j.LoggerFactory;
 
 class ConsumerSpec extends FunSpec with ScopedFixtures with Matchers with RabbitTestHelpers {
+
+  val logger = LoggerFactory.getLogger(this.getClass());
 
   val _queueName = ScopedFixture[String] { setter =>
     val name = s"test-queue-rabbit-control-${Math.random()}"
@@ -51,7 +54,7 @@ class ConsumerSpec extends FunSpec with ScopedFixtures with Matchers with Rabbit
               exclusive  = false,
               autoDelete = true)) {
               body(as[Int]) { i =>
-                println(s"Received #${i}")
+                logger.debug("Received #{}", i)
                 Thread.sleep(Math.round(generator.nextDouble() * 100))
                 promises(i).success(i)
                 ack
@@ -99,19 +102,19 @@ class ConsumerSpec extends FunSpec with ScopedFixtures with Matchers with Rabbit
 
   describe("RecoveryStrategy limitedRedeliver") {
     trait RedeliveryFixtures {
-      var errors = 0
+      val errors = new java.util.concurrent.atomic.AtomicInteger(0)
       implicit val logging = new RabbitErrorLogging {
         def apply(name: String, message: String, exception: Throwable, consumerTag: String, envelope: Envelope, properties: BasicProperties, body: Array[Byte]): Unit = {
-          println(s"ERROR ${bodyAsString(body, properties)}")
-          errors += 1
+          logger.debug(s"ERROR ${bodyAsString(body, properties)}")
+          errors.incrementAndGet()
         }
       }
       val range = (0 to 9)
       case class Counter(var count: Int = 0) { def ++ = { count+=1; count-1}}
       val seen = range map { _ => Counter(0) } toList
       lazy val promises = range map { i => Stream.continually(Promise[Int]).take(retryCount + 1).toVector } toList
-      val retryCount: Int
-      val queueName: String
+      def retryCount: Int
+      def queueName: String
       def awaitDeliveries() = Await.result(Future.sequence(promises.flatten map (_.future)), 10 seconds)
       import Directives._
       def countAndRejectSubscription()(implicit recoveryStrategy: RecoveryStrategy) =
@@ -130,21 +133,19 @@ class ConsumerSpec extends FunSpec with ScopedFixtures with Matchers with Rabbit
     }
 
     it("attempts every message twice when retryCount = 1") {
-      new RedeliveryFixtures with RabbitFixtures {
+      val fixtures = new RedeliveryFixtures {
         val retryCount = 1
-
-        implicit val recoveryStrategy = RecoveryStrategy.limitedRedeliver(redeliverDelay = 100 millis, retryCount = 1)
-
-        val subscriptionDef = countAndRejectSubscription()
-
-        val subscription = subscriptionDef.run(rabbitControl)
-        Await.result(subscription.initialized, 10 seconds)
-        range foreach { i => rabbitControl ! Message.queue(i, queueName) }
-        awaitDeliveries()
-        Thread.sleep(1000) // give it time to finish rejecting messages
-        (seen map (_.count)).distinct should be (List(2))
-        errors should be (20)
+        val queueName = _queueName()
       }
+      implicit val recoveryStrategy = RecoveryStrategy.limitedRedeliver(redeliverDelay = 100 millis, retryCount = 1)
+      val subscriptionDef = fixtures.countAndRejectSubscription()
+      val subscription = subscriptionDef.run(rabbitControl)
+      Await.result(subscription.initialized, 10 seconds)
+      fixtures.range foreach { i => rabbitControl ! Message.queue(i, fixtures.queueName) }
+      fixtures.awaitDeliveries()
+      Thread.sleep(1000) // give it time to finish rejecting messages
+      (fixtures.seen map (_.count)).distinct should be (List(2))
+      fixtures.errors.get should be (20)
     }
 
     describe("onAbandon abandonedQueue") {
@@ -241,8 +242,8 @@ class ConsumerSpec extends FunSpec with ScopedFixtures with Matchers with Rabbit
         (range) foreach { i => rabbitControl ! Message.queue(i, queueName) }
         ackThem.future.foreach(_ => subscription1.close())
         await(Future.sequence(firstEight.map(_.future)))
-        println("Round 1 complete")
-        println(s"receivedCounts = ${receivedCounts}")
+        logger.debug("Round 1 complete")
+        logger.debug(s"receivedCounts = ${receivedCounts}")
         subscription1.close()
         await(subscription1.closed)
 
@@ -254,14 +255,14 @@ class ConsumerSpec extends FunSpec with ScopedFixtures with Matchers with Rabbit
         reconnect(rabbitControl)
 
         val subscription2 = getSubscription(2)
-        println(s"--------------------------- waiting for the rest of the futures to be consumed")
+        logger.debug(s"--------------------------- waiting for the rest of the futures to be consumed")
         await(Future.sequence(received.map(_.future)))
 
         subscription2.close()
         await(subscription2.closed)
 
-        println("Round 2 complete")
-        println(s"receivedCounts = ${receivedCounts}")
+        logger.debug("Round 2 complete")
+        logger.debug(s"receivedCounts = ${receivedCounts}")
 
         rabbitControl ! new MessageForPublicationLike {
           val dropIfNoChannel = false
@@ -286,7 +287,7 @@ class ConsumerSpec extends FunSpec with ScopedFixtures with Matchers with Rabbit
           channel(qos = 8) {
             consume(queue(queueName, durable = true, exclusive = false, autoDelete = false)) {
               body(as[Int]) { i =>
-                println(s"${i} received")
+                logger.debug(s"${i} received")
                 receivedCounts(i) = receivedCounts(i) + 1
                 received(i).success(())
                 ackThem.future.map { _ => Thread.sleep(50 * i) }
@@ -299,8 +300,8 @@ class ConsumerSpec extends FunSpec with ScopedFixtures with Matchers with Rabbit
         await(subscription.initialized)
         (range) foreach { i => rabbitControl ! Message.queue(i, queueName) }
         await(Future.sequence(firstEight.map(_.future)))
-        println("Round 1 complete")
-        println(s"receivedCounts = ${receivedCounts}")
+        logger.debug("Round 1 complete")
+        logger.debug(s"receivedCounts = ${receivedCounts}")
         subscription.abort
         ackThem.completeWith(subscription.closed)
         await(subscription.closed) // the fact that we can get here is evidence that it works, since we don't even ack the messages until the consumer is closed
